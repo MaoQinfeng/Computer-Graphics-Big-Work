@@ -1,0 +1,198 @@
+#include "showwidget.h"
+
+ShowWidget::ShowWidget(QWidget *parent)
+    : QWidget(parent)
+{
+    reset();
+
+    image.fill(QColor(255,255,255));
+    top=QVector3D(200,200,-300);
+    QFile out("D:\\Vc\\C++\\image\\wxk.txt");
+    if(!out.open(QIODevice::ReadOnly | QIODevice::Text))
+    {
+        std::cout << "Open failed." << std::endl;
+    }
+
+    else{
+        QTextStream Tout(&out);
+        while(!Tout.atEnd()){
+            count=0;
+            for(int i =0;i<50&&(!Tout.atEnd());i++){
+                 for(int j =0;j<4&&(!Tout.atEnd());j++){
+                    int x,y,z;
+                    Tout>>x>>y>>z;
+                    if(x==y&&y==z&&z==0){}
+                    else{
+                        point[i][j].setX(x);
+                        point[i][j].setY(y);
+                        point[i][j].setZ(z);
+                        point[i][j].setW(1);
+                        count++;
+                    }
+
+                    //std::cout<<x<<y<<z<<"\t";
+                }
+
+                //std::cout<<"\n";
+            }
+
+        }
+
+    }
+    count = count/4;
+    //std::cout<<count<<"\n";
+    mul(count);
+    out.close();
+    //笔刷
+    for(int i = 0;i<count+1;i++){
+        if(i==0){
+            col[i] = (QColor(255,255,255));
+        }
+        else  {
+            col[i] = (QColor(rand()%255,rand()%255,rand()%255,200));
+
+        }
+    }
+    Zbuffdraw();
+    update();
+
+}
+void ShowWidget::mul(int n){
+
+    for(int i=0;i<n;i++){
+       for(int j=0;j<4;j++){
+           point[i][j].setX(point[i][j].x()*A[0][0]+point[i][j].y()*A[0][1]+point[i][j].z()*A[0][2]+point[i][j].w()*A[0][3]);
+           point[i][j].setY(point[i][j].x()*A[1][0]+point[i][j].y()*A[1][1]+point[i][j].z()*A[1][2]+point[i][j].w()*A[1][3]);
+           point[i][j].setZ(point[i][j].x()*A[2][0]+point[i][j].y()*A[2][1]+point[i][j].z()*A[2][2]+point[i][j].w()*A[2][3]);
+       }
+    }
+    //投影
+     for(int i=0;i<n;i++){
+        for(int j=0;j<4;j++){
+            point3d[i][j].setX((point[i][j].x()*top.z()-point[i][j].z()*top.x())/(top.z()-point[i][j].z()));
+            point3d[i][j].setY((point[i][j].y()*top.z()-point[i][j].z()*top.y())/(top.z()-point[i][j].z()));
+            point3d[i][j].setZ(point[i][j].z());
+
+            point2d[i][j].setX(point3d[i][j].x());
+            point2d[i][j].setY(point3d[i][j].y());
+        }
+     }
+
+}
+void ShowWidget::Zbuffdraw(){
+    image.fill(QColor(255,255,255));
+    QPainter painter(&image);
+    for(int i=0;i<count;i++){//第i个面
+        //A = (y3 - y1)*(z3 - z1) - (z2 -z1)*(y3 - y1);
+        //B = (x3 - x1)*(z2 - z1) - (x2 - x1)*(z3 - z1);
+        //C = (x2 - x1)*(y3 - y1) - (x3 - x1)*(y2 - y1);
+        //D = -(A * x1 + B * y1 + C * z1)
+        float A=(point3d[i][3].y()-point3d[i][1].y())*(point3d[i][3].z()-point3d[i][1].z())-(point3d[i][2].z()-point3d[i][1].z())*(point3d[i][3].y()-point3d[i][1].y());
+        float B=(point3d[i][3].x()-point3d[i][1].x())*(point3d[i][2].z()-point3d[i][1].z())-(point3d[i][2].x()-point3d[i][1].x())*(point3d[i][3].z()-point3d[i][1].z());
+        float C=(point3d[i][2].x()-point3d[i][1].x())*(point3d[i][3].y()-point3d[i][1].y())-(point3d[i][3].x()-point3d[i][1].x())*(point3d[i][2].y()-point3d[i][1].y());
+        float D=-1*(A*point3d[i][1].x()+B*point3d[i][1].y()+C*point3d[i][1].z());
+        QPolygonF polygon;
+        polygon << point2d[i][0]<< point2d[i][1]<< point2d[i][2]<< point2d[i][3];
+        //std::cout<<A<<"\t"<<B<<"\t"<<C<<"\t"<<D<<std::endl;
+        for(int x=0;x<400;x++){
+            for(int y=0;y<400;y++){
+                if(polygon.containsPoint(QPointF(x,y),Qt::WindingFill)){
+                    //计算z z= -(x*a+y*b+d)/c
+                   float z=0;
+                   if(C!=0){
+                       z=-(x*A+y*B+D)/C;
+                       //std::cout<<z<<std::endl;
+                       if(K[x][y]<=z){
+                            K[x][y]=z;
+                            ZBuf[x][y]=i+1;
+                        //std::cout<<i<<std::endl;
+                       }
+                   }
+                }
+            }
+        }
+        //std::cout<<"OK"<<endl;
+    }
+    for(int x=0;x<400;x++){
+        for(int y=0;y<400;y++){
+             int t =ZBuf[x][y];
+             if(t!=0){
+                 painter.setPen(col[t]);
+                 painter.drawPoint(QPoint(x,y));
+
+             }
+        }
+    }
+
+}
+void ShowWidget::draw(){
+//    image.fill(QColor(255,255,255));
+//    QPainter painter(&image);
+//    for(int i=count-1;i>=0;i--){
+//        QPolygonF polygon;
+//        polygon << point2d[i][0]<< point2d[i][1]<< point2d[i][2]<< point2d[i][3];
+//        brush[i].setStyle(Qt::SolidPattern);
+//        painter.setBrush(brush[i+1]);
+//        painter.setPen(pen[i+1]);
+//        painter.drawPolygon(polygon, Qt::WindingFill);
+//    }
+}
+ShowWidget::~ShowWidget()
+{
+
+}
+void ShowWidget::paintEvent(QPaintEvent *event){
+    QPainter painter(this);
+    painter.drawImage(0,0,image);
+
+}
+void ShowWidget::reset(){
+    for(int i=0;i<4;i++){
+        for(int j=0;j<4;j++){
+            A[i][j]=(i==j);
+        }
+    }
+    for(int i=0;i<400;i++){
+        for(int j=0;j<400;j++){
+            ZBuf[i][j]=0;
+            K[i][j]=0;
+        }
+    }
+}
+
+void ShowWidget::mousePressEvent(QMouseEvent *event){
+    sp = event->pos();
+}
+void ShowWidget::mouseMoveEvent(QMouseEvent *event){
+    QPoint dp=event->pos();
+    reset();
+    if(event->buttons()!=Qt::RightButton){//移动
+        A[0][3]=dp.x()-sp.x();
+        A[1][3]=dp.y()-sp.y();
+        sp = dp;
+        mul(count);
+        Zbuffdraw();
+        update();
+    }
+    else if(event->buttons()==Qt::RightButton){//旋转
+
+        dp=event->pos();//按几何中心，若按原点则 先A[0][2]=Xsum;A[1][2]=Ysum;
+        A[0][3]=-200;
+        A[1][3]=-200;
+        mul(start.size());
+        double cos=((sp.x()-Xsum)*(dp.x()-Xsum)+(sp.y()-Ysum)*(dp.y()-Ysum))/sqrt(((sp.x()-Xsum)*(sp.x()-Xsum)+(sp.y()-Ysum)*(sp.y()-Ysum))*((dp.x()-Xsum)*(dp.x()-Xsum)+(dp.y()-Ysum)*(dp.y()-Ysum)));
+        double sin =((sp.x()-Xsum)*(dp.y()-Ysum)-(sp.y()-Ysum)*(dp.x()-Xsum))/sqrt(((sp.x()-Xsum)*(sp.x()-Xsum)+(sp.y()-Ysum)*(sp.y()-Ysum))*((dp.x()-Xsum)*(dp.x()-Xsum)+(dp.y()-Ysum)*(dp.y()-Ysum)));
+        A[0][0]=cos;
+        A[0][1]=-sin;
+        A[1][0]=sin;
+        A[1][1]=cos;
+        mul(start.size());
+        image.fill(QColor(255,255,255));
+        A[0][3]=200;
+        A[1][3]=200;
+        mul(start.size());
+        //sp =dp;
+        update();
+
+    }
+}
